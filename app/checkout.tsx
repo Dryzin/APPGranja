@@ -1,5 +1,5 @@
 import { FontAwesome5 } from '@expo/vector-icons';
-import * as ImagePicker from 'expo-image-picker';
+import { CameraView, useCameraPermissions } from 'expo-camera';
 import { useRouter } from 'expo-router';
 import React, { useRef, useState } from 'react';
 import { ActivityIndicator, Alert, Image, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
@@ -17,6 +17,10 @@ export default function CheckoutScreen() {
 
   const [authMethod, setAuthMethod] = useState<'signature' | 'facial'>('signature');
   const [photoUri, setPhotoUri] = useState<string | null>(null);
+
+  const [permission, requestPermission] = useCameraPermissions();
+  const [isCameraActive, setIsCameraActive] = useState(false);
+  const cameraRef = useRef<any>(null);
 
   const bgStyle = `.m-signature-pad {box-shadow: none; border: none; margin: 0; padding: 0;} 
                    .m-signature-pad--body {border: none;}
@@ -69,23 +73,29 @@ export default function CheckoutScreen() {
     }
   };
 
-  const openCamera = async () => {
-    const permissionResult = await ImagePicker.requestCameraPermissionsAsync();
-
-    if (permissionResult.granted === false) {
-      Alert.alert('Permissão negada', 'O aplicativo precisa de permissão da câmera para ler imagens.');
-      return;
+  const openCameraLive = async () => {
+    if (!permission?.granted) {
+      const perm = await requestPermission();
+      if (!perm.granted) {
+        Alert.alert('Permissão negada', 'O aplicativo precisa de permissão da câmera.');
+        return;
+      }
     }
+    setIsCameraActive(true);
+  };
 
-    const result = await ImagePicker.launchCameraAsync({
-      mediaTypes: ImagePicker.MediaTypeOptions.Images,
-      allowsEditing: true,
-      aspect: [4, 3],
-      quality: 0.5,
-    });
-
-    if (!result.canceled && result.assets && result.assets.length > 0) {
-      setPhotoUri(result.assets[0].uri);
+  const takePicture = async () => {
+    if (cameraRef.current) {
+      try {
+        const photo = await cameraRef.current.takePictureAsync({ quality: 0.5, base64: false });
+        if (photo) {
+          setPhotoUri(photo.uri);
+          setIsCameraActive(false);
+        }
+      } catch (error) {
+        console.log(error);
+        Alert.alert('Erro', 'Não foi possível capturar a foto.');
+      }
     }
   };
 
@@ -181,16 +191,16 @@ export default function CheckoutScreen() {
               {photoUri ? (
                 <>
                   <Image source={{ uri: photoUri }} style={styles.previewImage} />
-                  <TouchableOpacity style={styles.retakeBtn} onPress={openCamera}>
-                    <FontAwesome5 name="redo" size={14} color="#5b8c51" />
-                    <Text style={styles.retakeText}>Tirar novamente</Text>
+                  <TouchableOpacity style={styles.retakeBtn} onPress={() => setPhotoUri(null)}>
+                    <FontAwesome5 name="trash" size={14} color="#dc3545" />
+                    <Text style={[styles.retakeText, { color: '#dc3545' }]}>Remover e tirar outra</Text>
                   </TouchableOpacity>
                 </>
               ) : (
-                <TouchableOpacity style={styles.takePhotoBtn} onPress={openCamera}>
+                <TouchableOpacity style={styles.takePhotoBtn} onPress={openCameraLive}>
                   <FontAwesome5 name="camera" size={36} color="#5b8c51" style={{ marginBottom: 10 }} />
-                  <Text style={styles.takePhotoText}>Toque para abrir a câmera</Text>
-                  <Text style={styles.takePhotoSubText}>e tirar uma selfie</Text>
+                  <Text style={styles.takePhotoText}>Toque para iniciar a selfie</Text>
+                  <Text style={styles.takePhotoSubText}>Análise de rosto estilo banco</Text>
                 </TouchableOpacity>
               )}
             </View>
@@ -237,6 +247,40 @@ export default function CheckoutScreen() {
           <Text style={[styles.navItemText, { color: '#5b8c51', fontWeight: 'bold' }]}>Finalizar</Text>
         </TouchableOpacity>
       </View>
+
+      {isCameraActive && (
+        <View style={styles.fullScreenCamera}>
+          <CameraView 
+            ref={cameraRef}
+            style={styles.cameraFill} 
+            facing="front"
+          >
+            <View style={styles.cameraOverlay}>
+              <View style={styles.cameraMask} />
+              <View style={styles.cameraOvalBorder} />
+              
+              <View style={styles.cameraTopInfo}>
+                 <Text style={styles.cameraTopInfoTitle}>Confirmar Compra</Text>
+                 <Text style={styles.cameraTopInfoDesc}>{cart.length} produto(s) no pedido</Text>
+                 <Text style={styles.cameraTopInfoPrice}>R$ {cartTotal.toFixed(2)}</Text>
+              </View>
+
+              <Text style={styles.cameraInstruction}>Enquadre seu rosto no oval</Text>
+              <View style={styles.cameraControls}>
+                <TouchableOpacity style={styles.cameraCloseBtn} onPress={() => setIsCameraActive(false)}>
+                  <FontAwesome5 name="times" size={24} color="#fff" />
+                </TouchableOpacity>
+                
+                <TouchableOpacity style={styles.cameraCaptureBtn} onPress={takePicture}>
+                  <View style={styles.cameraCaptureBtnInner} />
+                </TouchableOpacity>
+                
+                <View style={{ width: 44 }} />
+              </View>
+            </View>
+          </CameraView>
+        </View>
+      )}
     </View>
   );
 }
@@ -531,5 +575,116 @@ const styles = StyleSheet.create({
     fontSize: 10,
     fontWeight: 'bold',
     paddingHorizontal: 4,
+  },
+  fullScreenCamera: {
+    ...StyleSheet.absoluteFillObject,
+    zIndex: 999,
+    backgroundColor: '#000',
+  },
+  cameraFill: {
+    flex: 1,
+  },
+  cameraOverlay: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: 'transparent',
+  },
+  cameraInstruction: {
+    position: 'absolute',
+    bottom: 150,
+    fontSize: 20,
+    fontWeight: 'bold',
+    color: '#fff',
+    textAlign: 'center',
+    width: '100%',
+    zIndex: 10,
+    textShadowColor: 'rgba(0,0,0,0.8)',
+    textShadowOffset: { width: 1, height: 1 },
+    textShadowRadius: 5,
+  },
+  cameraTopInfo: {
+    position: 'absolute',
+    top: 60,
+    left: 20,
+    right: 20,
+    backgroundColor: 'rgba(255, 255, 255, 0.95)',
+    padding: 15,
+    borderRadius: 16,
+    alignItems: 'center',
+    zIndex: 20,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.1,
+    shadowRadius: 6,
+    elevation: 4,
+  },
+  cameraTopInfoTitle: {
+    fontSize: 14,
+    color: '#666',
+    fontWeight: 'bold',
+    textTransform: 'uppercase',
+    letterSpacing: 1,
+  },
+  cameraTopInfoDesc: {
+    fontSize: 15,
+    color: '#333',
+    marginVertical: 4,
+  },
+  cameraTopInfoPrice: {
+    fontSize: 32,
+    color: '#5b8c51',
+    fontWeight: 'bold',
+  },
+  cameraMask: {
+    position: 'absolute',
+    width: 280,
+    height: 380,
+    borderRadius: 200,
+    borderWidth: 600,
+    borderColor: 'rgba(0, 0, 0, 0.75)',
+  },
+  cameraOvalBorder: {
+    position: 'absolute',
+    width: 280,
+    height: 380,
+    borderRadius: 200,
+    borderWidth: 3,
+    borderColor: '#fef200',
+    borderStyle: 'dashed',
+  },
+  cameraControls: {
+    position: 'absolute',
+    bottom: 60,
+    width: '100%',
+    flexDirection: 'row',
+    justifyContent: 'space-around',
+    alignItems: 'center',
+    paddingHorizontal: 30,
+    zIndex: 10,
+  },
+  cameraCaptureBtn: {
+    width: 70,
+    height: 70,
+    borderRadius: 35,
+    backgroundColor: 'rgba(255,255,255,0.3)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderWidth: 2,
+    borderColor: '#fff',
+  },
+  cameraCaptureBtnInner: {
+    width: 54,
+    height: 54,
+    borderRadius: 27,
+    backgroundColor: '#fff',
+  },
+  cameraCloseBtn: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: 'rgba(0,0,0,0.5)',
+    justifyContent: 'center',
+    alignItems: 'center',
   },
 });

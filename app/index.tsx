@@ -9,8 +9,7 @@ const { width } = Dimensions.get('window');
 
 const TIPOS_OVOS = [
   { nome: 'Branco', iconUrl: 'egg', color: '#ffecb3', iconColor: '#d4a11c' },
-  { nome: 'Vermelho', iconUrl: 'egg', color: '#f8d1c1', iconColor: '#c5521b' },
-  { nome: 'Codorna', iconUrl: 'egg', color: '#e0d6c8', iconColor: '#8a6e45' }
+  { nome: 'Vermelho', iconUrl: 'egg', color: '#f8d1c1', iconColor: '#c5521b' }
 ];
 
 const CLASSIFICACOES = ['Jumbo', 'Extra', 'Grande', 'Médio', 'Pequeno', 'Tipo 1'];
